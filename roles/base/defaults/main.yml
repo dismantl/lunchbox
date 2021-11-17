@@ -1,0 +1,10 @@
+common_packages:
+  - tree
+  - net-tools
+  - linux-modules-extra-raspi
+unprivileged_user_name: lunchbox
+unprivileged_user_passwd: $6$OuPUvys.MaWVBPSM$iBDuJmS2BJ1DaUXCxSGIJiGpFECJyn6oQGWGoXZOzlWZ.RPHND.7DTZMALLiHLrxHZY.xFiaYuQvjKbP2zJNX/  # goeUwk3zUL3CVkDeqQPxYUzPd78w2FBs
+unprivileged_user_home: /home/{{ unprivileged_user_name }}
+unprivileged_user_ssh_key: "{{ lookup('file', 'lunchbox.pub') }}"
+loot_size_mbs: 8192  # 8GB
+loot_passphrase: CHANGEME

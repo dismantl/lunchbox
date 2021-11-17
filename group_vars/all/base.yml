@@ -1,0 +1,3 @@
+unprivileged_user_name: lunchbox
+unprivileged_user_home: /home/{{ unprivileged_user_name }}
+docker_version_arm64: 5:20.10.10~3-0~ubuntu-impish

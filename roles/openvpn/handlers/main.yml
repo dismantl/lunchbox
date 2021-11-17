@@ -1,0 +1,10 @@
+- name: reload sysctl
+  become: true
+  command: /sbin/sysctl --system
+
+- name: restart openvpn
+  shell: "sleep 5 && docker ps |grep openvpn && docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml restart || docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml up -d"
+
+- name: restart pagekite
+  become: true
+  shell: service pagekite restart

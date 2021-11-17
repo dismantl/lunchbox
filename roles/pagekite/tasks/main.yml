@@ -1,0 +1,33 @@
+- name: install pagekite package
+  become: true
+  apt:
+    name: pagekite
+    state: present
+    update_cache: yes
+
+- name: add user details
+  become: true
+  copy:
+    dest: /etc/pagekite.d/10_account.rc
+    owner: root
+    group: root
+    mode: 0600
+    content: |
+      kitename   = {{ pagekite_username }}.pagekite.me
+      kitesecret = {{ pagekite_secret }}
+
+- name: add SSH pagekite rule
+  become: true
+  copy:
+    dest: /etc/pagekite.d/80_sshd.rc
+    owner: root
+    group: root
+    mode: 0644
+    content: "service_on = raw/22:@kitename : localhost:22 : @kitesecret"
+
+- name: ensure pagekite service enabled and started
+  become: true
+  service:
+    name: pagekite
+    enabled: true
+    state: started

@@ -1,0 +1,100 @@
+- name: checkout docker-openvpn git repo
+  git:
+    repo: https://github.com/kylemanna/docker-openvpn.git
+    dest: "{{ unprivileged_user_home }}/openvpn"
+    update: no
+
+- name: copy openvpn docker-compose files
+  copy:
+    src: docker-compose.yml
+    dest: "{{ unprivileged_user_home }}/openvpn"
+    owner: "{{ unprivileged_user_name }}"
+    group: "{{ unprivileged_user_name }}"
+
+- name: create clients directory
+  file:
+    state: directory
+    path: "{{ unprivileged_user_home }}/openvpn/clients"
+    owner: "{{ unprivileged_user_name }}"
+    group: "{{ unprivileged_user_name }}"
+
+- name: create local copy of clients directory
+  delegate_to: 127.0.0.1
+  file:
+    state: directory
+    path: "{{ playbook_dir }}/openvpn_clients"
+
+- name: enable IP forwarding
+  become: true
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+
+- name: generate OpenVPN server config
+  command: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn ovpn_genconfig -u tcp://{{ vpn_domain }} -C AES-256-CBC"
+  args:
+    creates: "{{ unprivileged_user_home }}/openvpn/conf/openvpn.conf"
+  notify: restart openvpn
+
+- name: remove block-outside-dns directive from server config
+  become: true
+  lineinfile:
+    path: "{{ unprivileged_user_home }}/openvpn/conf/openvpn.conf"
+    regexp: '^push "block-outside-dns"$'
+    state: absent
+
+- name: generate OpenVPN server certificate authority (this will take several minutes)
+  expect:
+    command: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn ovpn_initpki nopass"
+    responses:
+      Common Name: Lunchbox VPN CA
+    creates: "{{ unprivileged_user_home }}/openvpn/conf/pki"
+    timeout: 300
+  async: 300
+  poll: 10
+  notify: restart openvpn
+
+- name: create OpenVPN client
+  when: vpn_client_name is defined
+  expect:
+    command: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn easyrsa build-client-full {{ vpn_client_name }} nopass"
+
+- name: save OpenVPN client config
+  when: vpn_client_name is defined
+  shell: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn ovpn_getclient {{ vpn_client_name }} |tee {{ unprivileged_user_home }}/openvpn/clients/{{ vpn_client_name }}.ovpn"
+  args:
+    creates: "{{ unprivileged_user_home }}/openvpn/clients/{{ vpn_client_name }}.ovpn"
+  register: vpn_client_config
+
+- name: patch remote client config to use Pagekite HTTP proxy
+  when: vpn_client_name is defined
+  lineinfile:
+    path: "{{ unprivileged_user_home }}/openvpn/clients/{{ vpn_client_name }}.ovpn"
+    insertafter: "remote {{ vpn_domain }} 1194 tcp"
+    line: "http-proxy {{ vpn_domain }} 443"
+
+- name: save OpenVPN client config locally
+  when: vpn_client_config is defined and vpn_client_name is defined
+  delegate_to: 127.0.0.1
+  copy:
+    content: "{{ vpn_client_config.stdout }}"
+    dest: "{{ playbook_dir }}/openvpn_clients/{{ vpn_client_name }}.ovpn"
+
+- name: patch local client config to use Pagekite HTTP proxy
+  when: vpn_client_config is defined and vpn_client_name is defined
+  delegate_to: 127.0.0.1
+  lineinfile:
+    path: "{{ playbook_dir }}/openvpn_clients/{{ vpn_client_name }}.ovpn"
+    insertafter: "remote {{ vpn_domain }} 1194 tcp"
+    line: "http-proxy {{ vpn_domain }} 443"
+
+- name: add OpenVPN pagekite rule
+  become: true
+  copy:
+    dest: /etc/pagekite.d/81_openvpn.rc
+    owner: root
+    group: root
+    mode: 0644
+    content: "service_on = raw/1194:vpn-@kitename : localhost:1194 : @kitesecret"
+  notify: restart pagekite

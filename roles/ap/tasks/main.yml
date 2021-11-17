@@ -1,0 +1,176 @@
+- name: install access point packages
+  become: true
+  apt:
+    name:
+      - hostapd
+      - dnsmasq
+    state: present
+    update_cache: yes
+
+- name: add network interface configs
+  become: true
+  copy:
+    dest: /etc/netplan/50-cloud-init.yaml
+    content: |
+      # This file is generated from information provided by the datasource.  Changes
+      # to it will not persist across an instance reboot.  To disable cloud-init's
+      # network configuration capabilities, write a file
+      # /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:
+      # network: {config: disabled}
+      network:
+        version: 2
+        ethernets:
+          eth0:
+            dhcp4: true
+            optional: true
+          wlan0:
+            dhcp4: false
+            addresses:
+              - 10.6.6.6/24
+  notify: netplan apply
+
+- name: add hostapd configuration
+  become: true
+  copy:
+    dest: /etc/hostapd/hostapd.conf
+    owner: root
+    group: root
+    mode: 0644
+    content: |
+      interface=wlan0
+      hw_mode=g
+      channel=7
+      ieee80211n=1
+      wmm_enabled=1
+      ht_capab=[HT40][SHORT-GI-20][DSSS_CCK-40]
+      macaddr_acl=0
+      auth_algs=1
+      ignore_broadcast_ssid=0
+      wpa=2
+      wpa_key_mgmt=WPA-PSK
+      wpa_pairwise=TKIP
+      rsn_pairwise=CCMP
+      ssid=lunchbox
+      wpa_passphrase={{ ap_password }}
+      ignore_broadcast_ssid=1
+
+- name: configure hostapd defaults
+  become: true
+  ansible.builtin.replace:
+    path: /etc/default/hostapd
+    regexp: '^#DAEMON_CONF=""$'
+    replace: 'DAEMON_CONF="/etc/hostapd/hostapd.conf"'
+
+- name: add dnsmasq configuration
+  become: true
+  copy:
+    dest: /etc/dnsmasq.conf
+    owner: root
+    group: root
+    mode: 0644
+    content: |
+      interface=wlan0
+      listen-address=10.6.6.6
+      bind-interfaces
+      server=1.1.1.1
+      domain-needed
+      bogus-priv
+      dhcp-range=10.6.6.10,10.6.6.100,255.255.255.0,24h
+
+- name: enable IP forwarding
+  become: true
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+
+- name: check if iptables NAT rules exist
+  stat:
+    path: /etc/iptables.ipv4.nat
+  register: iptables_result
+
+- name: add NAT iptables rule 1/3
+  when: not iptables_result.stat.exists
+  become: true
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: eth0
+    jump: MASQUERADE
+    action: append
+
+- name: add NAT iptables rule 2/3
+  when: not iptables_result.stat.exists
+  become: true
+  ansible.builtin.iptables:
+    chain: FORWARD
+    in_interface: eth0
+    out_interface: wlan0
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+    action: append
+
+- name: add NAT iptables rule 3/3
+  when: not iptables_result.stat.exists
+  become: true
+  ansible.builtin.iptables:
+    chain: FORWARD
+    in_interface: wlan0
+    out_interface: eth0
+    jump: ACCEPT
+    action: append
+
+- name: save iptables rules
+  when: not iptables_result.stat.exists
+  become: true
+  shell: iptables-save > /etc/iptables.ipv4.nat
+
+- name: add iptables restore line to rc.local
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/rc.local
+    create: yes
+    mode: 0755
+    line: iptables-restore < /etc/iptables.ipv4.nat
+
+- name: check if hostapd is masked
+  become: true
+  shell: "systemctl status hostapd | grep 'Loaded: masked'"
+  register: hostapd_masked
+  ignore_errors: yes
+
+- name: unmask hostapd service
+  when: hostapd_masked.rc == 0
+  become: true
+  command: systemctl unmask hostapd
+
+- name: ensure hostapd service enabled and started
+  become: true
+  service:
+    name: hostapd
+    enabled: true
+    state: started
+
+# - name: disable systemd-resolved
+#   become: true
+#   service:
+#     name: systemd-resolved
+#     state: stopped
+#     enabled: false
+
+# - name: change local DNS resolver
+#   become: true
+#   ansible.builtin.replace:
+#     path: /etc/resolv.conf
+#     regexp: '^nameserver 127.0.0.53$'
+#     replace: 'nameserver 127.0.0.1'
+
+- name: Flush handlers
+  meta: flush_handlers
+
+- name: ensure dnsmasq service enabled and started
+  become: true
+  service:
+    name: dnsmasq
+    enabled: true
+    state: started

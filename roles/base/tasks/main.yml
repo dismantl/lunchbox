@@ -1,0 +1,91 @@
+- name: check hostname
+  command: cat /etc/hostname
+  register: hostname
+  changed_when: false
+
+- name: add hostname to /etc/hosts
+  become: true
+  ansible.builtin.replace:
+    path: /etc/hosts
+    regexp: '^127.0.0.1\s+localhost$'
+    replace: '127.0.0.1 localhost lunchbox'
+
+- name: set hostname
+  when: hostname.stdout != 'lunchbox'
+  become: true
+  command: hostnamectl set-hostname lunchbox
+
+- name: add unprivileged user
+  become: true
+  user:
+    name: "{{ unprivileged_user_name }}"
+    password: "{{ unprivileged_user_passwd }}"
+    shell: /bin/bash
+    home: "{{ unprivileged_user_home }}"
+
+- name: add ssh authorized key to unprivileged user
+  become: true
+  authorized_key:
+    user: "{{ unprivileged_user_name }}"
+    state: present
+    key: "{{ unprivileged_user_ssh_key }}"
+    manage_dir: yes
+
+- name: allow SSH pubkey authentication
+  become: true
+  ansible.builtin.replace:
+    path: /etc/ssh/sshd_config
+    regexp: '^#PubkeyAuthentication yes$'
+    replace: 'PubkeyAuthentication yes'
+  notify: restart sshd
+
+- name: let unprivileged user sudo without password prompt
+  become: true
+  copy:
+    dest: /etc/sudoers.d/100-lunchbox
+    content: "{{ unprivileged_user_name }} ALL=(ALL) NOPASSWD:ALL"
+    owner: root
+    group: root
+    mode: 0440
+
+- name: install common packages
+  become: true
+  apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: yes
+
+- name: check if loot file exists
+  become: true
+  stat:
+    path: "{{ unprivileged_user_home }}/private"
+  register: loot_result
+
+- name: create loot file
+  become: true
+  when: not loot_result.stat.exists
+  shell: |
+    dd if=/dev/urandom of={{ unprivileged_user_home }}/private bs=1M count={{ loot_size_mbs }}
+    chown {{ unprivileged_user_name }}:{{ unprivileged_user_name }} {{ unprivileged_user_home }}/private
+
+- name: mount and format loot file
+  when: not loot_result.stat.exists
+  become: true
+  shell: |
+    LOOT_DEV=$(losetup -f --show {{ unprivileged_user_home }}/private)
+    echo -n {{ loot_passphrase }} | cryptsetup luksFormat $LOOT_DEV -
+    echo -n {{ loot_passphrase }} | cryptsetup luksOpen $LOOT_DEV private --key-file -
+    mkfs.ext4 /dev/mapper/private
+    cryptsetup luksClose /dev/mapper/private
+    losetup -d $LOOT_DEV
+
+- name: copy mount script
+  become: true
+  copy:
+    dest: "{{ unprivileged_user_home }}/mount.sh"
+    mode: 0755
+    content: |
+      #!/bin/bash
+      sudo cryptsetup luksOpen $(sudo losetup -f --show {{ unprivileged_user_home }}/private) private
+      mkdir -p {{ unprivileged_user_home }}/mnt
+      sudo mount /dev/mapper/private {{ unprivileged_user_home }}/mnt

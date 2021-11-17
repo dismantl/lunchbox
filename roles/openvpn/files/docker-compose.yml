@@ -1,0 +1,15 @@
+version: '2'
+services:
+  openvpn:
+    cap_add:
+      - NET_ADMIN
+    build:
+      context: .
+      dockerfile: Dockerfile.aarch64
+    container_name: openvpn
+    ports:
+      - "1194:1194/tcp"
+    restart: always
+    volumes:
+      - ./conf:/etc/openvpn
+    command: ovpn_run --proto tcp

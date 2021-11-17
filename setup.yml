@@ -1,0 +1,62 @@
+# setup access point with hidden SSID
+
+- name: Basic configuration
+  hosts: lunchbox
+  remote_user: ubuntu
+  tags:
+    - base
+    - never
+  roles:
+    - base
+
+- name: Remove SSH key from ubuntu user
+  hosts: lunchbox
+  remote_user: "{{ unprivileged_user_name }}"
+  tags:
+    - base
+  tasks:
+    - name: Remove SSH key from ubuntu user
+      become: true
+      file:
+        path: /home/ubuntu/.ssh/authorized_keys
+        state: absent
+
+- name: Install Pagekite
+  hosts: lunchbox
+  remote_user: "{{ unprivileged_user_name }}"
+  tags:
+    - pagekite
+  roles:
+    - pagekite
+
+- name: Setup access point with hidden SSID
+  hosts: lunchbox
+  remote_user: "{{ unprivileged_user_name }}"
+  tags:
+    - ap
+  roles:
+    - ap
+
+- name: Install and configure Docker
+  hosts: lunchbox
+  remote_user: "{{ unprivileged_user_name }}"
+  become: true
+  tags:
+    - docker
+  vars:
+    pip_package: python3-pip
+    pip_install_packages:
+      - name: docker
+    docker_users:
+      - "{{ unprivileged_user_name }}"
+  roles:
+    - geerlingguy.pip
+    - geerlingguy.docker_arm
+
+- name: Setup OpenVPN
+  hosts: lunchbox
+  remote_user: "{{ unprivileged_user_name }}"
+  tags:
+    - vpn
+  roles:
+    - openvpn
