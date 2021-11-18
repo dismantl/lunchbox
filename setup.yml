@@ -5,7 +5,6 @@
   remote_user: ubuntu
   tags:
     - base
-    - never
   roles:
     - base
 
