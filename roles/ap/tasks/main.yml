@@ -127,11 +127,14 @@
 
 - name: add iptables restore line to rc.local
   become: true
-  ansible.builtin.lineinfile:
-    path: /etc/rc.local
-    create: yes
+  copy:
+    dest: /etc/rc.local
+    owner: root
+    group: root
     mode: 0755
-    line: iptables-restore < /etc/iptables.ipv4.nat
+    content: |
+      #!/bin/sh -e
+      iptables-restore -n < /etc/iptables.ipv4.nat
 
 - name: check if hostapd is masked
   become: true
