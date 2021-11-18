@@ -1,6 +1,10 @@
 # Lunchbox
 
-Lunchbox lets you create a physical penetration testing drop box using a Raspberry Pi running Ubuntu Server 21.10. The device is meant to be plugged into a target network via ethernet (preferrably with power-over-ethernet). It will then provide SSH and OpenVPN remote access via [Pagekite](https://pagekite.net) tunneling, and a hidden-SSID access point for local wireless access.
+Lunchbox lets you create a physical penetration testing drop box using a Raspberry Pi running Ubuntu Server 21.10. The device is meant to be plugged into a target network via ethernet (preferrably with power-over-ethernet). It will then provide SSH and OpenVPN remote access via [Pagekite](https://pagekite.net) tunneling, and a hidden-SSID access point for local wireless access. Then load it with the tools of your choice, and you have yourself a pentesting lunchbox.
+
+## Dependencies
+
+To run the lunchbox setup script you'll need to have [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html) installed.
 
 ## Installation
 
