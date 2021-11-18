@@ -1,0 +1,15 @@
+- name: Basic configuration
+  hosts: lunchbox
+  remote_user: ubuntu
+  roles:
+    - base
+
+- name: Remove SSH key from ubuntu user
+  hosts: lunchbox
+  remote_user: "{{ unprivileged_user_name }}"
+  tasks:
+    - name: Remove SSH key from ubuntu user
+      become: true
+      file:
+        path: /home/ubuntu/.ssh/authorized_keys
+        state: absent

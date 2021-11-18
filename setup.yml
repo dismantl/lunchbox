@@ -1,25 +1,3 @@
-# setup access point with hidden SSID
-
-- name: Basic configuration
-  hosts: lunchbox
-  remote_user: ubuntu
-  tags:
-    - base
-  roles:
-    - base
-
-- name: Remove SSH key from ubuntu user
-  hosts: lunchbox
-  remote_user: "{{ unprivileged_user_name }}"
-  tags:
-    - base
-  tasks:
-    - name: Remove SSH key from ubuntu user
-      become: true
-      file:
-        path: /home/ubuntu/.ssh/authorized_keys
-        state: absent
-
 - name: Install Pagekite
   hosts: lunchbox
   remote_user: "{{ unprivileged_user_name }}"

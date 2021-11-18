@@ -1,2 +1,4 @@
 ansible.log
 host_vars/lunchbox.yml
+.initialized
+openvpn_clients/
