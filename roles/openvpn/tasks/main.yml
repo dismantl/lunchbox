@@ -31,6 +31,16 @@
     value: '1'
     sysctl_set: yes
 
+- name: check if veth kernel module loaded
+  shell: "lsmod | cut -d ' ' -f1"
+  changed_when: false
+  register: lsmod
+
+- name: reboot if veth kernel module not loaded
+  when: '"veth" not in lsmod.stdout'
+  become: true
+  reboot:
+
 - name: generate OpenVPN server config
   command: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn ovpn_genconfig -u tcp://{{ vpn_domain }} -C AES-256-CBC"
   args:
@@ -57,8 +67,7 @@
 
 - name: create OpenVPN client
   when: vpn_client_name is defined
-  expect:
-    command: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn easyrsa build-client-full {{ vpn_client_name }} nopass"
+  command: "docker-compose -f {{ unprivileged_user_home }}/openvpn/docker-compose.yml run --rm openvpn easyrsa build-client-full {{ vpn_client_name }} nopass"
 
 - name: save OpenVPN client config
   when: vpn_client_name is defined

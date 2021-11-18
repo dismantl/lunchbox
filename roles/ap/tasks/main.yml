@@ -138,12 +138,12 @@
 
 - name: check if hostapd is masked
   become: true
-  shell: "systemctl status hostapd | grep 'Loaded: masked'"
+  changed_when: false
+  shell: "systemctl status hostapd"
   register: hostapd_masked
-  ignore_errors: yes
 
 - name: unmask hostapd service
-  when: hostapd_masked.rc == 0
+  when: '"Loaded: masked" in hostapd_masked.stdout'
   become: true
   command: systemctl unmask hostapd
 
